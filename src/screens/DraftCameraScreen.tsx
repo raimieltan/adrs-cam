@@ -30,13 +30,16 @@ export default function DraftCameraScreen() {
     })()
   }, [])
 
+  const marksRef = useRef(marks)
+  useEffect(() => { marksRef.current = marks }, [marks])
+
   const handleWaterline = useCallback((yNorm: number, size: number) => {
     waterlineYNorm.value = withTiming(yNorm, { duration: 100 })
     setBufferSize(size)
     if (size >= STABILISE_THRESHOLD) {
-      setReading(interpolateDraft(marks, yNorm))
+      setReading(interpolateDraft(marksRef.current, yNorm))
     }
-  }, [marks, waterlineYNorm])
+  }, [waterlineYNorm])
 
   const frameProcessor = useWaterlineDetector(handleWaterline)
 

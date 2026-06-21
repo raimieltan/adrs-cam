@@ -7,10 +7,12 @@ export type WaterlinePluginResult = {
   confidence: number
 }
 
-export function detectWaterline(frame: Frame): WaterlinePluginResult {
+export function detectWaterline(frame: Frame): WaterlinePluginResult | null {
   'worklet'
   if (plugin == null) {
     throw new Error('detectWaterline: plugin not found — rebuild the app after adding the module')
   }
-  return plugin.call(frame) as WaterlinePluginResult
+  const raw = plugin.call(frame)
+  if (raw == null) return null
+  return raw as WaterlinePluginResult
 }

@@ -20,9 +20,12 @@ export function useWaterlineDetector(onUpdate: WaterlineCallback) {
     }
   }, [onUpdate])
 
-  return useFrameProcessor((frame) => {
+  const frameProcessor = useFrameProcessor((frame) => {
     'worklet'
     const result = detectWaterline(frame)
+    if (result == null) return
     runOnJS(handleResult)(result.waterlineYNorm, result.confidence)
   }, [handleResult])
+
+  return frameProcessor
 }
