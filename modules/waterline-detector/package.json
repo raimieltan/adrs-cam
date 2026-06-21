@@ -1,0 +1,8 @@
+{
+  "name": "waterline-detector",
+  "version": "1.0.0",
+  "description": "VisionCamera frame processor plugin for hull waterline detection",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "MIT"
+}
