@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { StyleSheet, useWindowDimensions, View, Text } from 'react-native'
+import { StyleSheet, View, Text } from 'react-native'
 import { Camera, useCameraDevice } from 'react-native-vision-camera'
 import { useSharedValue, withTiming } from 'react-native-reanimated'
 import { useMLKitOCR } from '../hooks/useMLKitOCR'
