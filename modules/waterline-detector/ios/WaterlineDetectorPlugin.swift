@@ -4,7 +4,7 @@ import VisionCamera
 
 @objc(WaterlineDetectorPlugin)
 public class WaterlineDetectorPlugin: FrameProcessorPlugin {
-    public required init(proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]! = [:]) {
+    public override init(proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]! = [:]) {
         super.init(proxy: proxy, options: options)
     }
 
