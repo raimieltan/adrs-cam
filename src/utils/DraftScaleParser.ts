@@ -26,6 +26,44 @@ export function parseScaleMarks(
 
   const candidates: { text: string; yNorm: number }[] = [];
 
+  // Flatten every line across all blocks with its Y position, sorted top→bottom.
+  // Used for cross-block digit+M assembly (e.g. "10" on one OCR block, "M" on the next).
+  const allLines = ocrResult
+    .flatMap((b) =>
+      b.lines.map((l) => ({
+        text: l.text.trim().toUpperCase().replace(/\s+/g, ""),
+        yNorm: (l.bounding.top + l.bounding.height / 2) / imageHeight,
+        heightNorm: l.bounding.height / imageHeight,
+      }))
+    )
+    .sort((a, b) => a.yNorm - b.yNorm);
+
+  // Pre-pass: find cross-block digit+M pairs separated by at most one mark height.
+  const crossBlockUsed = new Set<number>();
+  for (let i = 0; i < allLines.length; i++) {
+    const cur = allLines[i];
+    if (!/^\d+$/.test(cur.text)) continue; // only pure digit lines
+    for (let j = i + 1; j < allLines.length; j++) {
+      const nxt = allLines[j];
+      if (nxt.yNorm - cur.yNorm > (cur.heightNorm || 0.05) * 2) break; // too far apart
+      if (nxt.text === "M" || nxt.text === "m") {
+        const assembled = cur.text + "M";
+        if (METRE_RE.test(assembled)) {
+          const midY = (cur.yNorm + nxt.yNorm) / 2;
+          candidates.push({ text: assembled, yNorm: midY });
+          crossBlockUsed.add(i);
+          crossBlockUsed.add(j);
+        }
+        break;
+      }
+    }
+  }
+
+  // Build a lookup so the per-block loop can skip lines already assembled above.
+  const usedYNorms = new Set(
+    [...crossBlockUsed].map((idx) => allLines[idx].yNorm)
+  );
+
   for (const block of ocrResult) {
     const blockLines = block.lines.map((line) => ({
       text: line.text.trim().toUpperCase().replace(/\s+/g, ""),
@@ -35,6 +73,9 @@ export function parseScaleMarks(
 
     for (let i = 0; i < blockLines.length; i++) {
       const { text: lineText, yNorm: lineY, raw: line } = blockLines[i];
+
+      // Skip lines already consumed by cross-block pre-pass above
+      if (usedYNorms.has(lineY)) continue;
 
       // Attempt cross-line assembly: digit on one line + "M" on the adjacent line
       // catches "10M" split by OCR into ["10", "M"] on separate lines
