@@ -9,7 +9,8 @@ const STARTUP_DELAY_MS = 3000; // wait for AVCaptureSession to fully start
 
 export function useMLKitOCR(
   cameraRef: React.RefObject<Camera | null>,
-  enabled: boolean
+  enabled: boolean,
+  hintMetre: number | null = null
 ) {
   const [marks, setMarks] = useState<ScaleMark[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -38,7 +39,7 @@ export function useMLKitOCR(
 
       const result = await MLKit.detectFromFile(filePath);
       const allText = result.flatMap((b) => b.lines.map((l) => l.text)).join("|");
-      const parsed = parseScaleMarks(result, imageHeight);
+      const parsed = parseScaleMarks(result, imageHeight, hintMetre);
       const hasAnchor = parsed.some((m) => Number.isInteger(m.value));
 
       if (parsed.length > 0 && hasAnchor) {
@@ -60,7 +61,7 @@ export function useMLKitOCR(
       busy.current = false;
       setScanning(false);
     }
-  }, [cameraRef]);
+  }, [cameraRef, hintMetre]);
 
   useEffect(() => {
     if (!enabled) return;

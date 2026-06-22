@@ -31,15 +31,70 @@ function MarkDebugOverlay({ marks }: { marks: ScaleMark[] }) {
   )
 }
 
+function GearMenu({
+  debugMode,
+  onToggleDebug,
+  hintMetre,
+  onSetHint,
+  onClose,
+}: {
+  debugMode: boolean
+  onToggleDebug: () => void
+  hintMetre: number | null
+  onSetHint: (v: number | null) => void
+  onClose: () => void
+}) {
+  const hint = hintMetre ?? 9
+  return (
+    <View style={styles.menu}>
+      <Text style={styles.menuTitle}>Settings</Text>
+
+      <TouchableOpacity style={styles.menuRow} onPress={onToggleDebug}>
+        <Text style={styles.menuLabel}>Mark overlay</Text>
+        <Text style={[styles.menuValue, debugMode && styles.menuValueOn]}>
+          {debugMode ? 'ON' : 'OFF'}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.menuDivider} />
+
+      <Text style={styles.menuLabel}>Metre hint (lowest visible mark)</Text>
+      <Text style={styles.menuSubLabel}>
+        Set this to the metre mark nearest the waterline.{'\n'}
+        Required when OCR can't read the number prefix.
+      </Text>
+      <View style={styles.menuRow}>
+        <TouchableOpacity style={styles.menuBtn} onPress={() => onSetHint(Math.max(1, hint - 1))}>
+          <Text style={styles.menuBtnText}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.menuValue}>{hintMetre !== null ? `${hintMetre} M` : 'off'}</Text>
+        <TouchableOpacity style={styles.menuBtn} onPress={() => onSetHint(hint + 1)}>
+          <Text style={styles.menuBtnText}>+</Text>
+        </TouchableOpacity>
+        {hintMetre !== null && (
+          <TouchableOpacity style={[styles.menuBtn, { marginLeft: 12 }]} onPress={() => onSetHint(null)}>
+            <Text style={[styles.menuBtnText, { color: '#FF6B6B' }]}>×</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <TouchableOpacity style={styles.menuClose} onPress={onClose}>
+        <Text style={styles.menuCloseText}>Done</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
 export default function DraftCameraScreen() {
   const device = useCameraDevice('back')
   const cameraRef = useRef<Camera>(null)
-  const { height: screenHeight } = useWindowDimensions()
 
-  const { marks, scanning, debugMsg } = useMLKitOCR(cameraRef, true)
+  const [hintMetre, setHintMetre] = useState<number | null>(null)
+  const { marks, scanning, debugMsg } = useMLKitOCR(cameraRef, true, hintMetre)
   const [reading, setReading] = useState<DraftReading | null>(null)
   const [bufferSize, setBufferSize] = useState(0)
   const [debugMode, setDebugMode] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
 
   const waterlineYNorm = useSharedValue(0.5)
 
@@ -102,9 +157,19 @@ export default function DraftCameraScreen() {
         bufferSize={bufferSize}
       />
 
-      <TouchableOpacity style={styles.gear} onPress={() => setDebugMode(d => !d)}>
+      <TouchableOpacity style={styles.gear} onPress={() => setShowMenu(m => !m)}>
         <Text style={styles.gearText}>⚙</Text>
       </TouchableOpacity>
+
+      {showMenu && (
+        <GearMenu
+          debugMode={debugMode}
+          onToggleDebug={() => setDebugMode(d => !d)}
+          hintMetre={hintMetre}
+          onSetHint={setHintMetre}
+          onClose={() => setShowMenu(false)}
+        />
+      )}
 
       {bufferSize === 0 && (
         <View style={styles.noSignal}>
@@ -117,12 +182,7 @@ export default function DraftCameraScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000',
-  },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   errorText: { color: '#fff', fontSize: 16 },
   noSignal: {
     position: 'absolute',
@@ -146,6 +206,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   gearText: { fontSize: 22, color: '#fff' },
+  // Mark debug overlay
   markLine: {
     position: 'absolute',
     left: 0,
@@ -155,10 +216,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dashed',
   },
-  markLineBar: {
-    flex: 1,
-    height: 1,
-  },
+  markLineBar: { flex: 1, height: 1 },
   markLabel: {
     fontSize: 11,
     fontWeight: 'bold',
@@ -166,4 +224,40 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
+  // Gear menu
+  menu: {
+    position: 'absolute',
+    top: 60,
+    right: 70,
+    width: 260,
+    backgroundColor: 'rgba(20,20,20,0.95)',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  menuTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 12 },
+  menuDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 12 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  menuLabel: { color: '#ccc', fontSize: 14, flex: 1, marginBottom: 4 },
+  menuSubLabel: { color: '#888', fontSize: 11, marginBottom: 10 },
+  menuValue: { color: '#fff', fontSize: 16, fontWeight: '600', minWidth: 40, textAlign: 'center' },
+  menuValueOn: { color: '#00FF88' },
+  menuBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuBtnText: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  menuClose: {
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  menuCloseText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 })
