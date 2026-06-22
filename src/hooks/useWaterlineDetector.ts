@@ -1,6 +1,6 @@
 import { useFrameProcessor } from 'react-native-vision-camera'
-import { runOnJS } from 'react-native-reanimated'
-import { useRef, useCallback, useEffect } from 'react'
+import { Worklets } from 'react-native-worklets-core'
+import { useRef, useCallback, useEffect, useMemo } from 'react'
 import { WaterlineSmoother } from '../utils/WaterlineSmoother'
 import { detectWaterline } from 'waterline-detector'
 
@@ -20,12 +20,17 @@ export function useWaterlineDetector(onUpdate: WaterlineCallback) {
     }
   }, [onUpdate])
 
-  const frameProcessor = useFrameProcessor((frame) => {
+  // Worklets.createRunOnJS bridges from VisionCamera's worklets-core thread to JS.
+  // runOnJS from Reanimated does not work here — different runtime.
+  const handleResultJS = useMemo(
+    () => Worklets.createRunOnJS(handleResult),
+    [handleResult]
+  )
+
+  return useFrameProcessor((frame) => {
     'worklet'
     const result = detectWaterline(frame)
     if (result == null) return
-    runOnJS(handleResult)(result.waterlineYNorm, result.confidence)
-  }, [handleResult])
-
-  return frameProcessor
+    handleResultJS(result.waterlineYNorm, result.confidence)
+  }, [handleResultJS])
 }
