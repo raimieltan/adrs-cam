@@ -14,29 +14,32 @@ public class WaterlineDetectorPlugin: FrameProcessorPlugin {
         CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
 
-        // Work on luma (Y) plane of YUV420 — no colour conversion, fastest access
-        guard CVPixelBufferGetPlaneCount(imageBuffer) >= 1 else { return nil }
+        let planeCount = CVPixelBufferGetPlaneCount(imageBuffer)
 
-        let fullWidth  = CVPixelBufferGetWidthOfPlane(imageBuffer, 0)
-        let fullHeight = CVPixelBufferGetHeightOfPlane(imageBuffer, 0)
-        let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(imageBuffer, 0)
+        if planeCount >= 1 {
+            // YUV420 — plane 0 is the luma (Y) channel, 1 byte per pixel
+            return detectFromLumaPlane(imageBuffer)
+        } else {
+            // BGRA — non-planar, use green channel (offset 1) as luminance proxy
+            return detectFromBGRA(imageBuffer)
+        }
+    }
 
-        guard let base = CVPixelBufferGetBaseAddressOfPlane(imageBuffer, 0),
-              fullWidth > 0, fullHeight > 0 else { return nil }
+    private func detectFromLumaPlane(_ buf: CVPixelBuffer) -> [String: Any]? {
+        let width      = CVPixelBufferGetWidthOfPlane(buf, 0)
+        let height     = CVPixelBufferGetHeightOfPlane(buf, 0)
+        let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(buf, 0)
+        guard let base = CVPixelBufferGetBaseAddressOfPlane(buf, 0),
+              width > 0, height > 0 else { return nil }
 
         let luma = base.assumingMemoryBound(to: UInt8.self)
-
-        // Center horizontal strip: columns 35 %–65 % of width
-        let stripLeft  = fullWidth * 35 / 100
-        let stripWidth = max(1, fullWidth * 30 / 100)
-
-        // Search rows 20 %–80 % of height — skip edges
-        let searchStart = fullHeight * 20 / 100
-        let searchEnd   = fullHeight * 80 / 100
+        let stripLeft  = width * 35 / 100
+        let stripWidth = max(1, width * 30 / 100)
+        let searchStart = height * 15 / 100
+        let searchEnd   = height * 92 / 100
         let searchCount = searchEnd - searchStart
         guard searchCount > 2 else { return nil }
 
-        // Per-row mean luma across strip using vDSP (SIMD-vectorised)
         var rowMeans  = [Float](repeating: 0, count: searchCount)
         var rowFloats = [Float](repeating: 0, count: stripWidth)
 
@@ -49,23 +52,70 @@ public class WaterlineDetectorPlugin: FrameProcessorPlugin {
             rowMeans[i] = mean
         }
 
-        // Largest positive first-order difference = sharpest brightness drop top→bottom = waterline
-        var maxDrop: Float = 0
-        var waterlineIndex = searchCount / 2
+        return findWaterline(rowMeans: rowMeans, searchStart: searchStart, totalHeight: height)
+    }
 
-        for i in 0 ..< (searchCount - 1) {
-            let drop = rowMeans[i] - rowMeans[i + 1]
-            if drop > maxDrop {
-                maxDrop      = drop
-                waterlineIndex = i
+    private func detectFromBGRA(_ buf: CVPixelBuffer) -> [String: Any]? {
+        let width      = CVPixelBufferGetWidth(buf)
+        let height     = CVPixelBufferGetHeight(buf)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buf)
+        guard let base = CVPixelBufferGetBaseAddress(buf),
+              width > 0, height > 0 else { return nil }
+
+        let pixels = base.assumingMemoryBound(to: UInt8.self)
+        let stripLeft  = width * 35 / 100
+        let stripWidth = max(1, width * 30 / 100)
+        let searchStart = height * 15 / 100
+        let searchEnd   = height * 92 / 100
+        let searchCount = searchEnd - searchStart
+        guard searchCount > 2 else { return nil }
+
+        // Sample the green channel (BGRA offset 1) — good luminance proxy
+        var rowMeans = [Float](repeating: 0, count: searchCount)
+        for i in 0 ..< searchCount {
+            let row = searchStart + i
+            var sum: Float = 0
+            for col in 0 ..< stripWidth {
+                let offset = row * bytesPerRow + (stripLeft + col) * 4 + 1
+                sum += Float(pixels[offset])
+            }
+            rowMeans[i] = sum / Float(stripWidth)
+        }
+
+        return findWaterline(rowMeans: rowMeans, searchStart: searchStart, totalHeight: height)
+    }
+
+    private func findWaterline(rowMeans: [Float], searchStart: Int, totalHeight: Int) -> [String: Any]? {
+        let n = rowMeans.count
+        guard n > 6 else { return nil }
+
+        // Prefix sums for O(1) windowed mean queries
+        var prefix = [Float](repeating: 0, count: n + 1)
+        for i in 0 ..< n { prefix[i + 1] = prefix[i] + rowMeans[i] }
+        func mean(_ lo: Int, _ hi: Int) -> Float {
+            let c = hi - lo
+            return c > 0 ? (prefix[hi] - prefix[lo]) / Float(c) : 0
+        }
+
+        // Windowed split-mean: hull seams produce a temporary dark band then recover;
+        // the real waterline keeps everything below dark. Window ~12% of search range.
+        let half = max(4, n / 8)
+        var bestScore: Float = 0
+        var bestIndex = n / 2
+
+        for i in half ..< (n - half) {
+            let score = mean(i - half, i) - mean(i, i + half)
+            if score > bestScore {
+                bestScore = score
+                bestIndex = i
             }
         }
 
-        let waterlineRow  = searchStart + waterlineIndex
-        let waterlineYNorm = Double(waterlineRow) / Double(fullHeight)
-        // 30 luma units ≈ reliable hull/water edge; clamp to [0, 1]
-        let confidence = Double(min(maxDrop / 30.0, 1.0))
+        let waterlineRow   = searchStart + bestIndex
+        let waterlineYNorm = Double(waterlineRow) / Double(totalHeight)
+        // 20 luma units across the window ≈ reliable edge
+        let confidence = Double(min(bestScore / 20.0, 1.0))
 
-        return ["waterlineYNorm": waterlineYNorm, "confidence": confidence] as [String: Any]
+        return ["waterlineYNorm": waterlineYNorm, "confidence": confidence]
     }
 }

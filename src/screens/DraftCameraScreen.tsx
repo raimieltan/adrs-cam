@@ -60,6 +60,7 @@ export default function DraftCameraScreen() {
         isActive={true}
         photo={true}
         video={true}
+        pixelFormat="yuv"
         frameProcessor={frameProcessor}
       />
 
