@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   noSignalText: { color: '#fff', fontSize: 16 },
   gear: {
     position: 'absolute',
-    top: 16,
+    top: 60,
     right: 16,
     width: 44,
     height: 44,
