@@ -33,7 +33,7 @@ public class WaterlineDetectorPlugin: FrameProcessorPlugin {
               width > 0, height > 0 else { return nil }
 
         let luma = base.assumingMemoryBound(to: UInt8.self)
-        let stripLeft  = width * 35 / 100
+        let stripLeft  = width * 60 / 100
         let stripWidth = max(1, width * 30 / 100)
         let searchStart = height * 15 / 100
         let searchEnd   = height * 92 / 100
@@ -63,7 +63,7 @@ public class WaterlineDetectorPlugin: FrameProcessorPlugin {
               width > 0, height > 0 else { return nil }
 
         let pixels = base.assumingMemoryBound(to: UInt8.self)
-        let stripLeft  = width * 35 / 100
+        let stripLeft  = width * 60 / 100
         let stripWidth = max(1, width * 30 / 100)
         let searchStart = height * 15 / 100
         let searchEnd   = height * 92 / 100
